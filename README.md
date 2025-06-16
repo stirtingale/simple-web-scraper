@@ -20,7 +20,7 @@ The scraper consists of two main components:
 
 1. **PHP API Gateway** (`index.php`) - Handles HTTP requests, routing, and responses
 2. **Node.js Crawlers** - Two specialized crawlers for different use cases:
-   - `basic-crawler.js` - Fast HTTP-only crawler with regex parsing
+   - `basic-crawler.js` - Fast HTTP-only crawler with regex parsing (currently in use)
    - `simple-crawler.js` - Cheerio-based crawler with DOM manipulation
 
 ## Requirements
@@ -252,7 +252,7 @@ The project uses these npm packages:
 
 ### Crawler Selection
 
-The PHP API currently uses `basic-crawler.js` by default. To switch crawlers, modify line 162 in `index.php`:
+The PHP API currently uses `basic-crawler.js` by default. To switch to the Cheerio-based crawler, modify line 162 in `index.php`:
 
 ```php
 $nodeCrawlerPath = __DIR__ . '/node-crawler/simple-crawler.js';
@@ -451,6 +451,385 @@ while IFS= read -r url; do
     curl -s "http://localhost:8000/?url=$url" | jq -r '.title'
 done < urls.txt
 ```
+
+## Self-Hosted Module Integration
+
+### Adding as a Make.com Module
+
+To integrate this scraper as a custom module in your self-hosted Make.com instance:
+
+#### 1. Create Module Structure
+
+```bash
+# Navigate to your Make.com modules directory
+cd /path/to/make/modules
+
+# Create the scraper module
+mkdir web-scraper
+cd web-scraper
+
+# Create required module files
+touch module.json
+touch connection.json
+touch scrape.json
+mkdir functions
+touch functions/scrape.js
+```
+
+#### 2. Module Configuration (`module.json`)
+
+```json
+{
+  "name": "web-scraper",
+  "label": "Web Scraper",
+  "description": "Extract clean content from web pages",
+  "version": "1.0.0",
+  "author": "Your Organization",
+  "base": {
+    "url": "{{connection.host}}"
+  },
+  "connections": [
+    "web-scraper"
+  ],
+  "webhook": false
+}
+```
+
+#### 3. Connection Configuration (`connection.json`)
+
+```json
+{
+  "name": "web-scraper",
+  "type": "apikey",
+  "label": "Web Scraper Connection",
+  "description": "Connect to your self-hosted web scraper API",
+  "parameters": [
+    {
+      "name": "host",
+      "type": "url",
+      "label": "Scraper API Host",
+      "description": "The base URL of your scraper API (e.g., http://localhost:8000)",
+      "required": true
+    },
+    {
+      "name": "apikey",
+      "type": "text",
+      "label": "API Key",
+      "description": "Optional API key for authentication",
+      "required": false
+    }
+  ]
+}
+```
+
+#### 4. Scrape Action Configuration (`scrape.json`)
+
+```json
+{
+  "name": "scrape",
+  "label": "Scrape Website",
+  "description": "Extract content from a website URL",
+  "parameters": [
+    {
+      "name": "url",
+      "type": "url",
+      "label": "Website URL",
+      "description": "The URL to scrape content from",
+      "required": true
+    },
+    {
+      "name": "include_redirects",
+      "type": "boolean",
+      "label": "Include Redirect Information",
+      "description": "Include redirect chain information in the response",
+      "default": false
+    },
+    {
+      "name": "include_meta",
+      "type": "boolean",
+      "label": "Include Metadata",
+      "description": "Include page metadata (description, charset, etc.)",
+      "default": true
+    }
+  ],
+  "expect": [
+    {
+      "name": "success",
+      "type": "boolean",
+      "label": "Success"
+    },
+    {
+      "name": "url",
+      "type": "url",
+      "label": "Original URL"
+    },
+    {
+      "name": "final_url",
+      "type": "url",
+      "label": "Final URL"
+    },
+    {
+      "name": "title",
+      "type": "text",
+      "label": "Page Title"
+    },
+    {
+      "name": "content",
+      "type": "text",
+      "label": "Page Content"
+    },
+    {
+      "name": "word_count",
+      "type": "number",
+      "label": "Word Count"
+    },
+    {
+      "name": "timestamp",
+      "type": "date",
+      "label": "Scraped At"
+    },
+    {
+      "name": "meta",
+      "type": "collection",
+      "label": "Metadata",
+      "spec": [
+        {
+          "name": "description",
+          "type": "text",
+          "label": "Description"
+        },
+        {
+          "name": "charset",
+          "type": "text",
+          "label": "Character Set"
+        },
+        {
+          "name": "content_type",
+          "type": "text",
+          "label": "Content Type"
+        }
+      ]
+    },
+    {
+      "name": "redirects",
+      "type": "collection",
+      "label": "Redirect Information",
+      "spec": [
+        {
+          "name": "count",
+          "type": "number",
+          "label": "Redirect Count"
+        },
+        {
+          "name": "followed_redirects",
+          "type": "boolean",
+          "label": "Followed Redirects"
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### 5. Function Implementation (`functions/scrape.js`)
+
+```javascript
+const axios = require('axios');
+
+module.exports = async function(args) {
+    const { connection, parameters } = args;
+    
+    try {
+        // Build request URL
+        const baseUrl = connection.host.replace(/\/$/, '');
+        const scrapeUrl = `${baseUrl}/crawl`;
+        
+        // Prepare headers
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        
+        if (connection.apikey) {
+            headers['Authorization'] = `Bearer ${connection.apikey}`;
+        }
+        
+        // Make request to scraper API
+        const response = await axios.post(scrapeUrl, {
+            url: parameters.url
+        }, {
+            headers: headers,
+            timeout: 60000 // 60 second timeout
+        });
+        
+        const data = response.data;
+        
+        // Check if scraping was successful
+        if (!data.success) {
+            throw new Error(data.error || 'Scraping failed');
+        }
+        
+        // Format response for Make.com
+        const result = {
+            success: data.success,
+            url: data.url,
+            final_url: data.final_url,
+            title: data.title,
+            content: data.content,
+            word_count: data.word_count,
+            timestamp: data.timestamp
+        };
+        
+        // Include metadata if requested
+        if (parameters.include_meta && data.meta) {
+            result.meta = {
+                description: data.meta.description || '',
+                charset: data.meta.charset || 'utf-8',
+                content_type: data.meta.content_type || 'text/html'
+            };
+        }
+        
+        // Include redirect information if requested
+        if (parameters.include_redirects && data.redirects) {
+            result.redirects = {
+                count: data.redirects.count || 0,
+                followed_redirects: data.redirects.followed_redirects || false
+            };
+        }
+        
+        return result;
+        
+    } catch (error) {
+        // Handle different types of errors
+        if (error.response) {
+            // HTTP error response
+            const status = error.response.status;
+            const message = error.response.data?.error || error.response.statusText;
+            throw new Error(`HTTP ${status}: ${message}`);
+        } else if (error.request) {
+            // Network error
+            throw new Error('Network error: Unable to reach scraper API');
+        } else {
+            // Other error
+            throw new Error(error.message || 'Unknown error occurred');
+        }
+    }
+};
+```
+
+#### 6. Deploy Module
+
+```bash
+# Restart Make.com services to load the new module
+sudo systemctl restart make-core
+sudo systemctl restart make-worker
+
+# Or if using Docker
+docker-compose restart make-core make-worker
+```
+
+### Adding API Authentication (Optional)
+
+To secure your scraper API with authentication, modify `index.php`:
+
+```php
+// Add this after the CORS headers
+private function validateApiKey()
+{
+    $apiKey = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    $apiKey = str_replace('Bearer ', '', $apiKey);
+    
+    // Define your API keys here or load from environment
+    $validKeys = [
+        'your-secret-api-key-here',
+        // Add more keys as needed
+    ];
+    
+    if (!empty($apiKey) && in_array($apiKey, $validKeys)) {
+        return true;
+    }
+    
+    // If API key is provided but invalid, reject
+    if (!empty($apiKey)) {
+        return false;
+    }
+    
+    // Allow requests without API key (for backward compatibility)
+    return true;
+}
+
+// Add this check in handleCrawl() method
+private function handleCrawl()
+{
+    // Validate API key if provided
+    if (!$this->validateApiKey()) {
+        http_response_code(401);
+        return [
+            'success' => false,
+            'error' => 'Invalid API key',
+            'timestamp' => date('c')
+        ];
+    }
+    
+    // ... rest of existing code
+}
+```
+
+### Environment Configuration
+
+Create a `.env` file for configuration:
+
+```bash
+# Web Scraper Configuration
+SCRAPER_API_KEYS=key1,key2,key3
+SCRAPER_TIMEOUT=60
+SCRAPER_MAX_REDIRECTS=10
+SCRAPER_USER_AGENT=Make.com Web Scraper Bot 1.0
+```
+
+### Using in Make.com Scenarios
+
+Once installed, you can use the module in Make.com scenarios:
+
+1. **Basic Website Scraping**:
+   - Trigger: Webhook, Schedule, or other trigger
+   - Action: Web Scraper → Scrape Website
+   - Input: Website URL
+   - Output: Title, content, word count, etc.
+
+2. **Bulk URL Processing**:
+   - Trigger: Read CSV file with URLs
+   - Iterator: Split URLs
+   - Action: Web Scraper → Scrape Website
+   - Output: Aggregate results to Google Sheets
+
+3. **Content Monitoring**:
+   - Trigger: Schedule (every hour/day)
+   - Action: Web Scraper → Scrape Website
+   - Filter: Check if content changed
+   - Action: Send notification if changed
+
+### Troubleshooting Module Integration
+
+**Module not appearing in Make.com:**
+```bash
+# Check module syntax
+cd /path/to/make/modules/web-scraper
+node -c functions/scrape.js
+
+# Check Make.com logs
+tail -f /var/log/make/core.log
+tail -f /var/log/make/worker.log
+```
+
+**Connection errors:**
+- Verify the scraper API is accessible from Make.com server
+- Check firewall rules and network connectivity
+- Test API endpoint manually: `curl http://your-api-host/health`
+
+**Authentication issues:**
+- Verify API key configuration
+- Check HTTP headers in Make.com connection settings
+- Test with and without API key
 
 ## Development
 
