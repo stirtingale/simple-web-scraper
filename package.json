@@ -1,0 +1,25 @@
+{
+  "name": "node-crawler",
+  "version": "1.0.0",
+  "description": "Web crawler using Puppeteer",
+  "main": "basic-crawler.js",
+  "scripts": {
+    "start": "node basic-crawler.js",
+    "test": "node test-puppeteer.js",
+    "crawl": "node basic-crawler.js"
+  },
+  "keywords": [
+    "web-scraping",
+    "crawler",
+    "puppeteer",
+    "automation"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

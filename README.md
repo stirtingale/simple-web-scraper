@@ -1,882 +1,449 @@
 # Web Scraper API
 
-A comprehensive web scraping service that provides a RESTful API for extracting clean content from web pages. The system uses Node.js crawlers with multiple extraction methods and a PHP API gateway for easy integration.
+A robust web scraping service built with PHP and Node.js/Puppeteer that provides clean, structured content extraction from web pages. Designed for integration with automation platforms like Make.com.
 
 ## Features
 
-- **RESTful API**: Clean endpoint design with multiple routes
-- **Multiple Crawlers**: Choice between basic HTTP crawler and advanced Cheerio-based parser
-- **Anti-Detection**: Realistic browser headers and request patterns
-- **Content Extraction**: Intelligent parsing that removes ads, navigation, and clutter
-- **Redirect Tracking**: Full redirect chain analysis and final URL detection
-- **Health Monitoring**: Built-in health checks and system status endpoints
-- **Auto-Documentation**: Self-documenting API with usage examples
-- **CORS Support**: Built-in cross-origin request support
-- **Error Handling**: Comprehensive error responses with debugging information
-
-## Architecture
-
-The scraper consists of two main components:
-
-1. **PHP API Gateway** (`index.php`) - Handles HTTP requests, routing, and responses
-2. **Node.js Crawlers** - Two specialized crawlers for different use cases:
-   - `basic-crawler.js` - Fast HTTP-only crawler with regex parsing (currently in use)
-   - `simple-crawler.js` - Cheerio-based crawler with DOM manipulation
-
-## Requirements
-
-- PHP 7.4 or higher
-- Node.js 14.x or higher
-- npm (Node Package Manager)
-- Web server (Apache, Nginx, or PHP built-in server)
-- PHP extensions: `json` (usually enabled by default)
+- 🚀 **High-performance web scraping** using Puppeteer with Chrome headless browser
+- 🔍 **Intelligent content extraction** - automatically removes headers, footers, ads, and navigation
+- 🛡️ **Bot detection avoidance** with realistic browser headers and behavior
+- 🌐 **RESTful API** with JSON responses
+- 📊 **Structured data output** including title, clean text content, headings, and metadata
+- ⚡ **Concurrent crawling** support for multiple URLs
+- 🔧 **Make.com ready** - optimized for HTTP module integration
 
 ## Installation
 
-### 1. Install Node.js and npm
+### Prerequisites
 
-**Ubuntu/Debian:**
+- **Linux server** (Ubuntu/Debian recommended)
+- **Node.js** (version 14.0.0 or higher)
+- **PHP** (version 7.4 or higher)
+- **Web server** (Apache/Nginx)
+
+### Step 1: Install Node.js and Dependencies
+
 ```bash
-# Install Node.js and npm
-sudo apt update
-sudo apt install -y nodejs npm
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Install Node.js (if not already installed)
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
 # Verify installation
 node --version
 npm --version
 ```
 
-**CentOS/RHEL/Fedora:**
-```bash
-sudo dnf install nodejs npm
-```
-
-**macOS:**
-```bash
-brew install node
-```
-
-**Windows:**
-Download and install from [Node.js official website](https://nodejs.org/)
-
-### 2. Setup the Scraper
+### Step 2: Install Puppeteer and Chrome Dependencies
 
 ```bash
-# Navigate to the scraper directory
+# Navigate to your project directory
 cd /var/www/html/scrape
 
-# Setup Node.js crawler dependencies
-cd node-crawler
-
-# Install dependencies
+# Install npm dependencies
 npm install
 
-# Verify installation
-npm list
+# Install Chrome dependencies for headless browsing
+sudo apt-get install -y \
+    ca-certificates \
+    fonts-liberation \
+    libappindicator3-1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libc6 \
+    libcairo-gobject2 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libexpat1 \
+    libfontconfig1 \
+    libgbm1 \
+    libgcc1 \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libstdc++6 \
+    libx11-6 \
+    libx11-xcb1 \
+    libxcb1 \
+    libxcomposite1 \
+    libxcursor1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxi6 \
+    libxrandr2 \
+    libxrender1 \
+    libxss1 \
+    libxtst6 \
+    lsb-release \
+    wget \
+    xdg-utils
 ```
 
-### 3. Deploy the API
-
-1. Ensure the `index.php` file is in your web server directory
-2. Make sure the web server has execute permissions for Node.js scripts
-3. Configure your web server to serve PHP files
-
-### 4. Test Installation
-
-Start PHP built-in server for testing:
-```bash
-cd /var/www/html/scrape
-php -S localhost:8000
-```
-
-Test the API:
-```bash
-# View API documentation
-curl "http://localhost:8000/"
-
-# Test health check
-curl "http://localhost:8000/health"
-
-# Test scraping
-curl "http://localhost:8000/?url=https://example.com"
-```
-
-## API Endpoints
-
-### GET / - API Documentation
-Returns comprehensive API documentation with usage examples.
-
-```bash
-curl "http://localhost:8000/"
-```
-
-### GET /health - Health Check
-Checks system health including Node.js availability and crawler dependencies.
-
-```bash
-curl "http://localhost:8000/health"
-```
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "checks": {
-    "node_available": true,
-    "node_version": "v18.17.0",
-    "npm_available": true,
-    "npm_version": "9.6.7",
-    "node_crawler_exists": true,
-    "package_json_exists": true
-  },
-  "timestamp": "2025-06-16T12:00:00.000Z"
-}
-```
-
-### GET /status - System Status
-Returns detailed system information including memory usage and server details.
+### Step 3: Setup Puppeteer Cache Directory
 
 ```bash
-curl "http://localhost:8000/status"
+# Create cache directory with proper permissions
+sudo mkdir -p /var/cache/puppeteer
+sudo chown -R www-data:www-data /var/cache/puppeteer
+sudo chmod -R 755 /var/cache/puppeteer
+
+# Set up environment file
+echo "PUPPETEER_CACHE_DIR=/var/cache/puppeteer" > .env
+echo "DEBUG_MODE=false" >> .env
 ```
 
-### GET|POST /crawl - Crawl Website
-Main scraping endpoint that extracts content from the specified URL.
+### Step 4: Configure Web Server Permissions
 
-**GET Request:**
 ```bash
-curl "http://localhost:8000/crawl?url=https://example.com"
-# OR shorthand
-curl "http://localhost:8000/?url=https://example.com"
+# Make the crawler script executable
+chmod +x run-crawler.sh
+
+# Set proper ownership for web server
+sudo chown -R www-data:www-data /var/www/html/scrape
+sudo chmod -R 755 /var/www/html/scrape
 ```
 
-**POST Request (JSON):**
+### Step 5: Test Installation
+
 ```bash
-curl -X POST http://localhost:8000/crawl \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://example.com"}'
+# Test Node.js crawler directly
+node basic-crawler.js https://example.com
+
+# Test PHP web interface
+curl "http://localhost/scrape/?url=https://example.com"
 ```
 
-**POST Request (Form Data):**
+## Usage
+
+### Direct Command Line Usage
+
 ```bash
-curl -X POST http://localhost:8000/crawl \
-  -d "url=https://example.com"
+# Crawl a single URL
+node basic-crawler.js https://example.com
+
+# Crawl multiple URLs
+node basic-crawler.js https://example.com https://github.com
+
+# Output JSON format (for integration)
+node basic-crawler.js --json https://example.com
 ```
 
-## Response Format
+### HTTP API Usage
 
-### Success Response
+The web scraper provides a REST API endpoint that accepts URL parameters and returns JSON responses.
+
+#### Endpoint
+```
+GET /scrape/?url=https://example.com
+POST /scrape/ (with url in form data)
+```
+
+#### Example Request
+```bash
+curl "http://yourserver.com/scrape/?url=https://example.com"
+```
+
+#### Example Response
 ```json
 {
   "success": true,
   "url": "https://example.com",
-  "final_url": "https://www.example.com",
-  "redirects": {
-    "count": 1,
-    "chain": [
-      {
-        "from": "https://example.com",
-        "to": "https://www.example.com",
-        "status": 301
-      }
-    ],
-    "followed_redirects": true
-  },
-  "status_code": 200,
+  "timestamp": "2024-12-16T10:30:00.000Z",
+  "duration": 2456,
   "title": "Example Domain",
-  "content": "This domain is for use in illustrative examples in documents...",
+  "textContent": "This domain is for use in illustrative examples...",
+  "headings": [
+    {
+      "tag": "h1",
+      "text": "Example Domain"
+    }
+  ],
+  "wordCount": 45,
   "meta": {
-    "description": "Example domain for documentation",
-    "url": "https://www.example.com",
-    "charset": "utf-8",
-    "content_type": "text/html; charset=UTF-8"
+    "description": "This domain is for use in illustrative examples",
+    "keywords": "",
+    "author": ""
   },
-  "timestamp": "2025-06-16T12:00:00.000Z",
-  "word_count": 28
+  "execution_time_ms": 2456,
+  "processed_by": "PHP Web Interface"
 }
 ```
 
-### Error Response
+## Make.com Integration
+
+### Setting up the HTTP Module
+
+1. **Add HTTP Module**: In your Make.com scenario, add an "HTTP" module and select "Make a request"
+
+2. **Configure Request**:
+   - **URL**: `http://yourserver.com/scrape/`
+   - **Method**: `GET`
+   - **Query String**: Add parameter `url` with the website URL you want to scrape
+
+3. **Headers** (optional but recommended):
+   ```
+   Content-Type: application/json
+   User-Agent: Make.com Integration Bot
+   ```
+
+### Make.com Configuration Examples
+
+#### Basic URL Scraping
+```
+URL: http://yourserver.com/scrape/
+Method: GET
+Query String: 
+  - url: {{your_target_url}}
+```
+
+#### With Error Handling
+Set up error handling in Make.com:
+- **Success condition**: `success = true`
+- **Error handling**: Check for `success = false` and handle `error` field
+
+#### Extracting Data
+Access the returned data in subsequent modules:
+- **Page Title**: `{{response.title}}`
+- **Clean Text**: `{{response.textContent}}`
+- **Word Count**: `{{response.wordCount}}`
+- **Headings**: `{{response.headings}}`
+- **Meta Description**: `{{response.meta.description}}`
+
+### Advanced Make.com Scenarios
+
+#### 1. Monitor Website Changes
+```yaml
+Trigger: Schedule (every hour)
+Action 1: HTTP Request to scrape target URL
+Action 2: Compare with previous content (using Data Store)
+Action 3: Send notification if content changed
+```
+
+#### 2. Bulk URL Processing
+```yaml
+Input: CSV/JSON with URLs
+Iterator: Loop through URLs
+Action: HTTP Request for each URL
+Output: Aggregate results to Google Sheets
+```
+
+#### 3. Content Analysis Pipeline
+```yaml
+Action 1: HTTP Request to scrape URL
+Action 2: Send text content to OpenAI for analysis
+Action 3: Store results in Airtable/Notion
+Action 4: Send summary email
+```
+
+### Step-by-Step Make.com Setup
+
+#### 1. Create New Scenario
+1. Log into your Make.com account
+2. Click "Create a new scenario"
+3. Choose your trigger (Schedule, Webhook, etc.)
+
+#### 2. Add HTTP Module
+1. Click the "+" button to add a module
+2. Search for "HTTP" and select "HTTP"
+3. Choose "Make a request"
+
+#### 3. Configure HTTP Request
+```
+URL: http://your-server.com/scrape/
+Method: GET
+Query String:
+  Name: url
+  Value: https://example.com (or use variable from previous module)
+
+Headers (optional):
+  Name: Content-Type
+  Value: application/json
+  
+  Name: User-Agent
+  Value: Make.com Bot v1.0
+```
+
+#### 4. Test the Connection
+1. Click "Run once" to test
+2. Verify you receive a JSON response with `success: true`
+3. Check the returned data structure
+
+#### 5. Use the Scraped Data
+In subsequent modules, access the data using:
+- `{{1.title}}` - Page title
+- `{{1.textContent}}` - Clean text content
+- `{{1.wordCount}}` - Word count
+- `{{1.meta.description}}` - Meta description
+- `{{1.headings}}` - Array of headings
+
+#### 6. Error Handling Setup
+1. Right-click the HTTP module
+2. Select "Add error handler"
+3. Add a filter: `{{1.success}} = false`
+4. Connect to notification or logging module
+
+## API Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Whether the scraping was successful |
+| `url` | string | The scraped URL |
+| `timestamp` | string | ISO timestamp of the request |
+| `duration` | number | Time taken to scrape (milliseconds) |
+| `title` | string | Page title |
+| `textContent` | string | Clean, extracted text content |
+| `headings` | array | Structured heading data |
+| `wordCount` | number | Number of words in content |
+| `meta` | object | Page metadata (description, keywords, author) |
+| `error` | string | Error message (if success = false) |
+
+## Error Handling
+
+The API returns appropriate HTTP status codes:
+- **200**: Success
+- **400**: Bad request (missing/invalid URL)
+- **500**: Server error (crawler failure)
+
+Common error responses:
 ```json
 {
   "success": false,
-  "error": "Invalid URL provided",
-  "url": "invalid-url",
-  "timestamp": "2025-06-16T12:00:00.000Z"
+  "error": "Invalid URL format",
+  "provided_url": "not-a-url",
+  "timestamp": "2024-12-16T10:30:00.000Z"
 }
 ```
-
-## Node.js Crawlers
-
-### Dependencies
-
-The project uses these npm packages:
-
-```json
-{
-  "dependencies": {
-    "axios": "^1.10.0",
-    "cheerio": "^1.1.0",
-    "jsdom": "^26.1.0",
-    "puppeteer": "^24.10.1"
-  }
-}
-```
-
-### Basic Crawler (`basic-crawler.js`)
-
-- **Method**: HTTP requests with axios
-- **Parsing**: Regex-based HTML parsing
-- **Features**: 
-  - Redirect tracking
-  - Charset detection
-  - Advanced content filtering
-  - Text extraction with formatting preservation
-  - Comprehensive error handling
-
-**Best for**: Fast crawling, simple websites, high-volume requests
-
-### Simple Crawler (`simple-crawler.js`)
-
-- **Method**: HTTP requests with axios + Cheerio DOM parsing
-- **Parsing**: jQuery-like DOM manipulation
-- **Features**:
-  - Precise element selection
-  - CSS selector-based content extraction
-  - Clean HTML output
-  - Efficient unwanted element removal
-
-**Best for**: Complex websites, precise content extraction, structured data
 
 ## Configuration
 
-### Crawler Selection
-
-The PHP API currently uses `basic-crawler.js` by default. To switch to the Cheerio-based crawler, modify line 162 in `index.php`:
-
-```php
-$nodeCrawlerPath = __DIR__ . '/node-crawler/simple-crawler.js';
+### Environment Variables (.env file)
+```env
+PUPPETEER_CACHE_DIR=/var/cache/puppeteer
+DEBUG_MODE=false
 ```
 
-### Timeout Settings
-
-Default timeout is 30 seconds for Node.js crawlers and 60 seconds for PHP execution.
-
-**Node.js crawler timeout** (in crawler files):
-```javascript
-this.timeout = 30000; // 30 seconds
-```
-
-**PHP execution timeout** (in index.php):
-```php
-$command = "timeout 60 node " . escapeshellarg($scriptName) . " {$escapedUrl} 2>&1";
-```
-
-### Content Filtering
-
-Both crawlers remove these elements by default:
-- Scripts and stylesheets
-- Advertisements and banners
-- Navigation and sidebars
-- Pop-ups and modals
-- Social media widgets
-- Comment sections
-- Headers and footers
-
-## Security Considerations
-
-- **URL Validation**: All URLs are validated using `filter_var()`
-- **Shell Injection Protection**: All shell arguments are properly escaped
-- **Timeout Protection**: Commands are wrapped with timeout to prevent hanging
-- **Error Sanitization**: Sensitive system information is filtered from error responses
-- **CORS Configuration**: Cross-origin access is properly configured
+### Crawler Options
+The crawler includes several optimizations:
+- **Bot detection avoidance**: Realistic user agents and headers
+- **Resource blocking**: Images and fonts blocked for faster loading
+- **Content filtering**: Automatic removal of ads, navigation, footers
+- **Timeout handling**: 30-second timeout for page loads
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Node.js/npm not found:**
-```bash
-# Check if Node.js is installed
-node --version
-npm --version
+1. **Chrome not found**
+   ```bash
+   # Download Chrome manually if needed
+   sudo apt-get install -y google-chrome-stable
+   ```
 
-# Install if missing
-sudo apt install nodejs npm  # Ubuntu/Debian
-sudo dnf install nodejs npm  # CentOS/RHEL/Fedora
-```
+2. **Permission errors**
+   ```bash
+   sudo chown -R www-data:www-data /var/www/html/scrape
+   sudo chmod +x run-crawler.sh
+   ```
 
-**Dependencies not installed:**
-```bash
-cd /var/www/html/scrape/node-crawler
-npm install
-```
+3. **Node.js not found**
+   ```bash
+   which node
+   # Update the path in run-crawler.sh if needed
+   ```
 
-**Permission denied:**
-```bash
-# Ensure crawler scripts are executable
-chmod +x node-crawler/*.js
+4. **Memory issues**
+   ```bash
+   # Increase PHP memory limit
+   ini_set('memory_limit', '512M');
+   ```
 
-# Check web server permissions
-ls -la node-crawler/
-```
-
-**Crawler script not found:**
-```bash
-# Verify crawler exists
-ls -la node-crawler/basic-crawler.js
-
-# Check the path in index.php line 162
-grep "nodeCrawlerPath" index.php
-```
-
-**Timeout errors:**
-- Increase timeout values for slow-loading pages
-- Check network connectivity
-- Monitor server resources
-
-**Empty or invalid JSON response:**
-- Check Node.js error output by removing `2>&1` redirection
-- Verify crawler script syntax: `node node-crawler/basic-crawler.js https://example.com`
-- Check system logs for errors
+5. **Make.com Connection Issues**
+   - Verify your server URL is accessible from the internet
+   - Check firewall settings (port 80/443 open)
+   - Test the API endpoint manually: `curl "http://yourserver.com/scrape/?url=https://example.com"`
+   - Ensure SSL certificate is valid if using HTTPS
 
 ### Debug Mode
-
-**Test crawler directly:**
-```bash
-cd node-crawler
-node basic-crawler.js https://example.com
-node simple-crawler.js https://example.com
+Enable debug mode in `.env`:
+```env
+DEBUG_MODE=true
 ```
 
-**Note**: `basic-crawler.js` is currently configured as the default crawler in the API.
+This will log detailed information to help diagnose issues.
 
-**Enable PHP error reporting:**
-```php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-```
+### Make.com Specific Troubleshooting
 
-**Check health endpoint:**
-```bash
-curl -s "http://localhost:8000/health" | jq '.'
-```
+1. **HTTP Module Returns Error**
+   - Check the URL format (include http:// or https://)
+   - Verify the server is responding: `curl -I http://yourserver.com/scrape/`
+   - Check Make.com execution logs for detailed error messages
 
-## Performance
+2. **Empty or Null Response**
+   - Test the API directly with curl
+   - Check if the target website blocks your server's IP
+   - Verify the scraped website allows automated access
 
-- **Memory Usage**: ~50-100MB per request (Node.js process)
-- **Processing Time**: 1-5 seconds depending on page complexity
-- **Concurrent Requests**: Limited by server resources and Node.js processes
-- **Scalability**: Can be load-balanced across multiple servers
+3. **Timeout Errors**
+   - Increase timeout in Make.com HTTP module settings
+   - Check server resources (CPU, memory)
+   - Test with simpler websites first
 
-## Examples
+## Performance Notes
 
-### JavaScript Client
+- **Concurrent requests**: The system can handle multiple concurrent requests
+- **Resource optimization**: Images and fonts are blocked to improve speed
+- **Memory management**: Browser instances are properly closed after each request
+- **Caching**: Consider implementing response caching for frequently accessed URLs
+- **Rate limiting**: Implement rate limiting for production use
 
-```javascript
-class ScraperClient {
-  constructor(baseUrl = 'http://localhost:8000') {
-    this.baseUrl = baseUrl;
-  }
+## Security Considerations
 
-  async scrape(url) {
-    const response = await fetch(`${this.baseUrl}/crawl`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ url })
-    });
-    
-    return await response.json();
-  }
+- **URL validation**: All URLs are validated before processing
+- **CORS enabled**: API supports cross-origin requests
+- **Rate limiting**: Consider implementing rate limiting for production use
+- **Input sanitization**: All inputs are properly escaped and validated
+- **Server security**: Ensure your server is properly secured and updated
 
-  async health() {
-    const response = await fetch(`${this.baseUrl}/health`);
-    return await response.json();
-  }
-}
+## Advanced Make.com Integrations
 
-// Usage
-const scraper = new ScraperClient();
-const result = await scraper.scrape('https://example.com');
-console.log('Title:', result.title);
-console.log('Content:', result.content);
-```
+### 1. Website Monitoring Dashboard
+Create a scenario that:
+1. Scrapes multiple websites on schedule
+2. Compares content with previous versions
+3. Updates a Google Sheet with changes
+4. Sends Slack notifications for important updates
 
-### Python Client
+### 2. SEO Content Analysis
+Build a workflow that:
+1. Scrapes competitor websites
+2. Analyzes word count and headings
+3. Sends data to ChatGPT for SEO recommendations
+4. Saves results to Airtable
 
-```python
-import requests
-import json
-
-class ScraperClient:
-    def __init__(self, base_url='http://localhost:8000'):
-        self.base_url = base_url
-    
-    def scrape(self, url):
-        response = requests.post(f'{self.base_url}/crawl', json={'url': url})
-        return response.json()
-    
-    def health(self):
-        response = requests.get(f'{self.base_url}/health')
-        return response.json()
-
-# Usage
-scraper = ScraperClient()
-result = scraper.scrape('https://example.com')
-print(f"Title: {result['title']}")
-print(f"Word count: {result['word_count']}")
-```
-
-### Shell Scripts
-
-**Basic scraping:**
-```bash
-#!/bin/bash
-URL="$1"
-if [ -z "$URL" ]; then
-    echo "Usage: $0 <url>"
-    exit 1
-fi
-
-curl -s -X POST http://localhost:8000/crawl \
-    -H "Content-Type: application/json" \
-    -d "{\"url\": \"$URL\"}" | jq '.'
-```
-
-**Batch processing:**
-```bash
-#!/bin/bash
-while IFS= read -r url; do
-    echo "Processing: $url"
-    curl -s "http://localhost:8000/?url=$url" | jq -r '.title'
-done < urls.txt
-```
-
-## Self-Hosted Module Integration
-
-### Adding as a Make.com Module
-
-To integrate this scraper as a custom module in your self-hosted Make.com instance:
-
-#### 1. Create Module Structure
-
-```bash
-# Navigate to your Make.com modules directory
-cd /path/to/make/modules
-
-# Create the scraper module
-mkdir web-scraper
-cd web-scraper
-
-# Create required module files
-touch module.json
-touch connection.json
-touch scrape.json
-mkdir functions
-touch functions/scrape.js
-```
-
-#### 2. Module Configuration (`module.json`)
-
-```json
-{
-  "name": "web-scraper",
-  "label": "Web Scraper",
-  "description": "Extract clean content from web pages",
-  "version": "1.0.0",
-  "author": "Your Organization",
-  "base": {
-    "url": "{{connection.host}}"
-  },
-  "connections": [
-    "web-scraper"
-  ],
-  "webhook": false
-}
-```
-
-#### 3. Connection Configuration (`connection.json`)
-
-```json
-{
-  "name": "web-scraper",
-  "type": "apikey",
-  "label": "Web Scraper Connection",
-  "description": "Connect to your self-hosted web scraper API",
-  "parameters": [
-    {
-      "name": "host",
-      "type": "url",
-      "label": "Scraper API Host",
-      "description": "The base URL of your scraper API (e.g., http://localhost:8000)",
-      "required": true
-    },
-    {
-      "name": "apikey",
-      "type": "text",
-      "label": "API Key",
-      "description": "Optional API key for authentication",
-      "required": false
-    }
-  ]
-}
-```
-
-#### 4. Scrape Action Configuration (`scrape.json`)
-
-```json
-{
-  "name": "scrape",
-  "label": "Scrape Website",
-  "description": "Extract content from a website URL",
-  "parameters": [
-    {
-      "name": "url",
-      "type": "url",
-      "label": "Website URL",
-      "description": "The URL to scrape content from",
-      "required": true
-    },
-    {
-      "name": "include_redirects",
-      "type": "boolean",
-      "label": "Include Redirect Information",
-      "description": "Include redirect chain information in the response",
-      "default": false
-    },
-    {
-      "name": "include_meta",
-      "type": "boolean",
-      "label": "Include Metadata",
-      "description": "Include page metadata (description, charset, etc.)",
-      "default": true
-    }
-  ],
-  "expect": [
-    {
-      "name": "success",
-      "type": "boolean",
-      "label": "Success"
-    },
-    {
-      "name": "url",
-      "type": "url",
-      "label": "Original URL"
-    },
-    {
-      "name": "final_url",
-      "type": "url",
-      "label": "Final URL"
-    },
-    {
-      "name": "title",
-      "type": "text",
-      "label": "Page Title"
-    },
-    {
-      "name": "content",
-      "type": "text",
-      "label": "Page Content"
-    },
-    {
-      "name": "word_count",
-      "type": "number",
-      "label": "Word Count"
-    },
-    {
-      "name": "timestamp",
-      "type": "date",
-      "label": "Scraped At"
-    },
-    {
-      "name": "meta",
-      "type": "collection",
-      "label": "Metadata",
-      "spec": [
-        {
-          "name": "description",
-          "type": "text",
-          "label": "Description"
-        },
-        {
-          "name": "charset",
-          "type": "text",
-          "label": "Character Set"
-        },
-        {
-          "name": "content_type",
-          "type": "text",
-          "label": "Content Type"
-        }
-      ]
-    },
-    {
-      "name": "redirects",
-      "type": "collection",
-      "label": "Redirect Information",
-      "spec": [
-        {
-          "name": "count",
-          "type": "number",
-          "label": "Redirect Count"
-        },
-        {
-          "name": "followed_redirects",
-          "type": "boolean",
-          "label": "Followed Redirects"
-        }
-      ]
-    }
-  ]
-}
-```
-
-#### 5. Function Implementation (`functions/scrape.js`)
-
-```javascript
-const axios = require('axios');
-
-module.exports = async function(args) {
-    const { connection, parameters } = args;
-    
-    try {
-        // Build request URL
-        const baseUrl = connection.host.replace(/\/$/, '');
-        const scrapeUrl = `${baseUrl}/crawl`;
-        
-        // Prepare headers
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        
-        if (connection.apikey) {
-            headers['Authorization'] = `Bearer ${connection.apikey}`;
-        }
-        
-        // Make request to scraper API
-        const response = await axios.post(scrapeUrl, {
-            url: parameters.url
-        }, {
-            headers: headers,
-            timeout: 60000 // 60 second timeout
-        });
-        
-        const data = response.data;
-        
-        // Check if scraping was successful
-        if (!data.success) {
-            throw new Error(data.error || 'Scraping failed');
-        }
-        
-        // Format response for Make.com
-        const result = {
-            success: data.success,
-            url: data.url,
-            final_url: data.final_url,
-            title: data.title,
-            content: data.content,
-            word_count: data.word_count,
-            timestamp: data.timestamp
-        };
-        
-        // Include metadata if requested
-        if (parameters.include_meta && data.meta) {
-            result.meta = {
-                description: data.meta.description || '',
-                charset: data.meta.charset || 'utf-8',
-                content_type: data.meta.content_type || 'text/html'
-            };
-        }
-        
-        // Include redirect information if requested
-        if (parameters.include_redirects && data.redirects) {
-            result.redirects = {
-                count: data.redirects.count || 0,
-                followed_redirects: data.redirects.followed_redirects || false
-            };
-        }
-        
-        return result;
-        
-    } catch (error) {
-        // Handle different types of errors
-        if (error.response) {
-            // HTTP error response
-            const status = error.response.status;
-            const message = error.response.data?.error || error.response.statusText;
-            throw new Error(`HTTP ${status}: ${message}`);
-        } else if (error.request) {
-            // Network error
-            throw new Error('Network error: Unable to reach scraper API');
-        } else {
-            // Other error
-            throw new Error(error.message || 'Unknown error occurred');
-        }
-    }
-};
-```
-
-#### 6. Deploy Module
-
-```bash
-# Restart Make.com services to load the new module
-sudo systemctl restart make-core
-sudo systemctl restart make-worker
-
-# Or if using Docker
-docker-compose restart make-core make-worker
-```
-
-### Adding API Authentication (Optional)
-
-To secure your scraper API with authentication, modify `index.php`:
-
-```php
-// Add this after the CORS headers
-private function validateApiKey()
-{
-    $apiKey = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    $apiKey = str_replace('Bearer ', '', $apiKey);
-    
-    // Define your API keys here or load from environment
-    $validKeys = [
-        'your-secret-api-key-here',
-        // Add more keys as needed
-    ];
-    
-    if (!empty($apiKey) && in_array($apiKey, $validKeys)) {
-        return true;
-    }
-    
-    // If API key is provided but invalid, reject
-    if (!empty($apiKey)) {
-        return false;
-    }
-    
-    // Allow requests without API key (for backward compatibility)
-    return true;
-}
-
-// Add this check in handleCrawl() method
-private function handleCrawl()
-{
-    // Validate API key if provided
-    if (!$this->validateApiKey()) {
-        http_response_code(401);
-        return [
-            'success' => false,
-            'error' => 'Invalid API key',
-            'timestamp' => date('c')
-        ];
-    }
-    
-    // ... rest of existing code
-}
-```
-
-### Environment Configuration
-
-Create a `.env` file for configuration:
-
-```bash
-# Web Scraper Configuration
-SCRAPER_API_KEYS=key1,key2,key3
-SCRAPER_TIMEOUT=60
-SCRAPER_MAX_REDIRECTS=10
-SCRAPER_USER_AGENT=Make.com Web Scraper Bot 1.0
-```
-
-### Using in Make.com Scenarios
-
-Once installed, you can use the module in Make.com scenarios:
-
-1. **Basic Website Scraping**:
-   - Trigger: Webhook, Schedule, or other trigger
-   - Action: Web Scraper → Scrape Website
-   - Input: Website URL
-   - Output: Title, content, word count, etc.
-
-2. **Bulk URL Processing**:
-   - Trigger: Read CSV file with URLs
-   - Iterator: Split URLs
-   - Action: Web Scraper → Scrape Website
-   - Output: Aggregate results to Google Sheets
-
-3. **Content Monitoring**:
-   - Trigger: Schedule (every hour/day)
-   - Action: Web Scraper → Scrape Website
-   - Filter: Check if content changed
-   - Action: Send notification if changed
-
-### Troubleshooting Module Integration
-
-**Module not appearing in Make.com:**
-```bash
-# Check module syntax
-cd /path/to/make/modules/web-scraper
-node -c functions/scrape.js
-
-# Check Make.com logs
-tail -f /var/log/make/core.log
-tail -f /var/log/make/worker.log
-```
-
-**Connection errors:**
-- Verify the scraper API is accessible from Make.com server
-- Check firewall rules and network connectivity
-- Test API endpoint manually: `curl http://your-api-host/health`
-
-**Authentication issues:**
-- Verify API key configuration
-- Check HTTP headers in Make.com connection settings
-- Test with and without API key
-
-## Development
-
-### Adding New Crawlers
-
-1. Create a new crawler in `node-crawler/` directory
-2. Follow the same interface pattern (URL as first argument, JSON output)
-3. Update the crawler path in `index.php`
-4. Test with the health check endpoint
-
-### API Extensions
-
-The PHP API supports easy extension through the routing system in the `handleRequest()` method.
-
-### Monitoring
-
-Use the `/health` and `/status` endpoints for monitoring and alerting:
-
-```bash
-# Simple uptime check
-curl -f http://localhost:8000/health > /dev/null
-
-# Detailed monitoring
-curl -s http://localhost:8000/status | jq '.memory_usage'
-```
+### 3. News Aggregation
+Set up automation to:
+1. Scrape multiple news sources
+2. Extract article content
+3. Summarize using AI
+4. Post to social media or newsletter
 
 ## License
 
-This project is open source. Use responsibly and respect website terms of service and robots.txt files.
+This project is open source and available under the [MIT License](LICENSE).
 
-## Contributing
+## Support
 
-When contributing:
-
-1. Test with various websites and content types
-2. Ensure proper error handling and cleanup
-3. Maintain API compatibility
-4. Add tests for new crawlers
-5. Update documentation for new features
-
-## Limitations
-
-- Requires Node.js runtime environment
-- May be detected by sophisticated anti-bot systems
-- Resource intensive due to HTTP requests and parsing
-- Limited by server memory and processing power
-- Some sites may require additional headers or authentication
-- JavaScript-heavy sites may need the Puppeteer crawler (not currently integrated)
+For issues and questions:
+1. Check the troubleshooting section above
+2. Review the debug logs when `DEBUG_MODE=true`
+3. Test with simple URLs first (like `https://example.com`)
+4. Ensure all dependencies are properly installed
+5. For Make.com specific issues, check the execution history and error logs in your Make.com dashboard
