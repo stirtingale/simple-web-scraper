@@ -1,365 +1,332 @@
 <?php
 
 /**
- * Web Crawler with Browser Session
- * Crawls URLs using headless Chrome to avoid detection
- * Returns clean content as JSON via webhook
+ * Web Scraper API
+ * Main entry point for the web scraping service
  */
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
 
-// Handle OPTIONS request for CORS
+// Handle CORS preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit();
 }
 
-class WebCrawler
+// API Documentation and routing
+class ScraperAPI
 {
-    private $chromePath;
-    private $userDataDir;
-    private $timeout = 30;
+    private $version = '1.0.0';
 
     public function __construct()
     {
-        // Common Chrome installation paths
-        $chromePaths = [
-            '/usr/bin/google-chrome',
-            '/usr/bin/chromium-browser',
-            '/usr/bin/chromium',
-            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-            'C:\Program Files\Google\Chrome\Application\chrome.exe',
-            'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe'
-        ];
-
-        foreach ($chromePaths as $path) {
-            if (file_exists($path)) {
-                $this->chromePath = $path;
-                break;
-            }
-        }
-
-        if (!$this->chromePath) {
-            throw new Exception('Chrome/Chromium not found. Please install Google Chrome or Chromium.');
-        }
-
-        $this->userDataDir = sys_get_temp_dir() . '/chrome_user_data_' . uniqid();
+        // Constructor
     }
 
-    /**
-     * Crawl a URL and return clean content
-     */
-    public function crawl($url, $options = [])
+    public function handleRequest()
+    {
+        $method = $_SERVER['REQUEST_METHOD'];
+        $path = $_SERVER['REQUEST_URI'];
+        $parsedUrl = parse_url($path);
+        $route = $parsedUrl['path'] ?? '/';
+
+        // Get query parameters
+        $queryParams = [];
+        if (isset($parsedUrl['query'])) {
+            parse_str($parsedUrl['query'], $queryParams);
+        }
+
+        // If there's a 'url' parameter, treat it as a crawl request regardless of path
+        if (isset($queryParams['url']) || isset($_POST['url']) || $this->hasJsonUrl()) {
+            return $this->handleCrawl();
+        }
+
+        // Remove base path if needed for clean routing
+        $route = str_replace('/scrape', '', $route);
+        if ($route === '') $route = '/';
+
+        switch ($route) {
+            case '/':
+            case '/index.php':
+                return $this->showDocs();
+
+            case '/crawl':
+                return $this->handleCrawl();
+
+            case '/health':
+                return $this->healthCheck();
+
+            case '/status':
+                return $this->getStatus();
+
+            default:
+                return $this->notFound();
+        }
+    }
+
+    private function hasJsonUrl()
+    {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $input = json_decode(file_get_contents('php://input'), true);
+            return isset($input['url']);
+        }
+        return false;
+    }
+
+    private function showDocs()
+    {
+        $baseUrl = $this->getBaseUrl();
+
+        return [
+            'name' => 'Web Scraper API',
+            'version' => $this->version,
+            'description' => 'A web scraping service that extracts clean content from web pages',
+            'endpoints' => [
+                'GET /' => 'This documentation',
+                'GET /health' => 'Health check endpoint',
+                'GET /status' => 'System status and configuration',
+                'POST /crawl' => 'Scrape a website',
+                'GET /crawl' => 'Scrape a website (GET method)'
+            ],
+            'usage' => [
+                'post_example' => [
+                    'url' => $baseUrl . '/crawl',
+                    'method' => 'POST',
+                    'headers' => [
+                        'Content-Type' => 'application/json'
+                    ],
+                    'body' => [
+                        'url' => 'https://example.com'
+                    ]
+                ],
+                'get_example' => [
+                    'url' => $baseUrl . '?url=https://example.com',
+                    'method' => 'GET'
+                ]
+            ],
+            'response_format' => [
+                'success' => true,
+                'url' => 'https://example.com',
+                'title' => 'Page Title',
+                'content' => '<p>Clean HTML content...</p>',
+                'meta' => [
+                    'description' => 'Page meta description',
+                    'url' => 'https://example.com'
+                ],
+                'timestamp' => '2025-06-16T12:00:00.000Z',
+                'word_count' => 1234
+            ],
+            'features' => [
+                'Browser-like crawling with realistic headers',
+                'Automatic ad and unwanted content removal',
+                'Clean HTML markup extraction',
+                'Meta information extraction',
+                'Word count analysis',
+                'JSON response format',
+                'CORS support'
+            ],
+            'timestamp' => date('c')
+        ];
+    }
+
+    private function handleCrawl()
+    {
+        // Get URL from request
+        $url = '';
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $url = $input['url'] ?? $_POST['url'] ?? '';
+        } else {
+            $url = $_GET['url'] ?? '';
+        }
+
+        if (empty($url)) {
+            return [
+                'success' => false,
+                'error' => 'URL parameter is required',
+                'timestamp' => date('c')
+            ];
+        }
+
+        // Call the Node.js crawler directly
+        return $this->callNodeCrawler($url);
+    }
+
+    private function callNodeCrawler($url)
     {
         try {
+            // Path to the Node.js crawler script
+            $nodeCrawlerPath = __DIR__ . '/node-crawler/basic-crawler.js';
+
+            // Check if Node.js crawler exists
+            if (!file_exists($nodeCrawlerPath)) {
+                return [
+                    'success' => false,
+                    'error' => 'Node.js crawler script not found at: ' . $nodeCrawlerPath,
+                    'timestamp' => date('c')
+                ];
+            }
+
             // Validate URL
             if (!filter_var($url, FILTER_VALIDATE_URL)) {
-                throw new Exception('Invalid URL provided');
+                return [
+                    'success' => false,
+                    'error' => 'Invalid URL provided',
+                    'timestamp' => date('c')
+                ];
             }
 
-            // Create temporary HTML file for the page content
-            $tempFile = tempnam(sys_get_temp_dir(), 'crawl_');
-            $scriptFile = tempnam(sys_get_temp_dir(), 'script_') . '.js';
+            // Escape the URL for shell execution
+            $escapedUrl = escapeshellarg($url);
 
-            // JavaScript to extract clean content
-            $script = $this->generateExtractionScript();
-            file_put_contents($scriptFile, $script);
+            // Build the command
+            $nodeDir = dirname($nodeCrawlerPath);
+            $scriptName = basename($nodeCrawlerPath);
 
-            // Chrome arguments for stealth browsing
-            $chromeArgs = [
-                '--headless',
-                '--no-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--disable-web-security',
-                '--disable-features=VizDisplayCompositor',
-                '--user-data-dir=' . escapeshellarg($this->userDataDir),
-                '--user-agent=' . escapeshellarg($this->getRandomUserAgent()),
-                '--window-size=1920,1080',
-                '--disable-blink-features=AutomationControlled',
-                '--disable-extensions',
-                '--no-first-run',
-                '--disable-default-apps',
-                '--disable-sync',
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding',
-                '--timeout=' . ($this->timeout * 1000)
-            ];
+            $command = "cd " . escapeshellarg($nodeDir) . " && " .
+                "timeout 60 node " . escapeshellarg($scriptName) . " {$escapedUrl} 2>&1";
 
-            // Build Chrome command
-            $command = escapeshellcmd($this->chromePath) . ' ' .
-                implode(' ', $chromeArgs) . ' ' .
-                '--dump-dom ' . escapeshellarg($url) . ' > ' . escapeshellarg($tempFile) . ' 2>/dev/null';
+            // Execute the Node.js crawler
+            $output = shell_exec($command);
 
-            // Execute Chrome command
-            exec($command, $output, $returnCode);
-
-            if ($returnCode !== 0) {
-                throw new Exception('Failed to load page with Chrome');
+            if (empty($output)) {
+                return [
+                    'success' => false,
+                    'error' => 'No output from Node.js crawler. Command may have timed out or failed.',
+                    'timestamp' => date('c')
+                ];
             }
 
-            // Read the dumped DOM
-            $html = file_get_contents($tempFile);
-            if (empty($html)) {
-                throw new Exception('No content retrieved from URL');
+            // Parse JSON response
+            $result = json_decode($output, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return [
+                    'success' => false,
+                    'error' => 'Invalid JSON response from Node.js crawler',
+                    'raw_output' => substr($output, 0, 500),
+                    'timestamp' => date('c')
+                ];
             }
 
-            // Process the HTML to extract clean content
-            $cleanContent = $this->extractCleanContent($html);
-
-            // Clean up temporary files
-            unlink($tempFile);
-            unlink($scriptFile);
-            $this->cleanup();
-
-            return [
-                'success' => true,
-                'url' => $url,
-                'title' => $cleanContent['title'],
-                'content' => $cleanContent['content'],
-                'meta' => $cleanContent['meta'],
-                'timestamp' => date('c'),
-                'word_count' => str_word_count(strip_tags($cleanContent['content']))
-            ];
+            return $result;
         } catch (Exception $e) {
-            $this->cleanup();
             return [
                 'success' => false,
                 'error' => $e->getMessage(),
-                'url' => $url ?? null,
+                'url' => $url,
                 'timestamp' => date('c')
             ];
         }
     }
 
-    /**
-     * Extract clean content from HTML
-     */
-    private function extractCleanContent($html)
+    private function healthCheck()
     {
-        // Create DOMDocument
-        $dom = new DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="UTF-8">' . $html);
-        libxml_clear_errors();
+        $checks = [];
 
-        $xpath = new DOMXPath($dom);
+        // Check if Node.js is available
+        $nodeVersion = trim(shell_exec('node --version 2>/dev/null') ?: '');
+        $checks['node_available'] = !empty($nodeVersion);
+        $checks['node_version'] = $nodeVersion ?: 'Not found';
 
-        // Remove unwanted elements (ads, scripts, etc.)
-        $unwantedSelectors = [
-            '//script',
-            '//style',
-            '//noscript',
-            '//iframe',
-            '//embed',
-            '//object',
-            '//form',
-            '//nav',
-            '//header[@class="header"]',
-            '//footer',
-            '//aside',
-            '//*[contains(@class, "ad")]',
-            '//*[contains(@class, "advertisement")]',
-            '//*[contains(@class, "banner")]',
-            '//*[contains(@class, "popup")]',
-            '//*[contains(@class, "modal")]',
-            '//*[contains(@class, "cookie")]',
-            '//*[contains(@class, "social")]',
-            '//*[contains(@class, "share")]',
-            '//*[contains(@class, "comment")]',
-            '//*[contains(@id, "ad")]',
-            '//*[contains(@id, "advertisement")]',
-            '//*[contains(@id, "sidebar")]',
-            '//*[contains(@id, "footer")]',
-            '//*[contains(@id, "header")]'
-        ];
+        // Check if npm is available
+        $npmVersion = trim(shell_exec('npm --version 2>/dev/null') ?: '');
+        $checks['npm_available'] = !empty($npmVersion);
+        $checks['npm_version'] = $npmVersion ?: 'Not found';
 
-        foreach ($unwantedSelectors as $selector) {
-            $elements = $xpath->query($selector);
-            foreach ($elements as $element) {
-                if ($element->parentNode) {
-                    $element->parentNode->removeChild($element);
-                }
-            }
-        }
+        // Check if crawler dependencies exist
+        $nodeCrawlerPath = __DIR__ . '/node-crawler/basic-crawler.js';
+        $checks['node_crawler_exists'] = file_exists($nodeCrawlerPath);
 
-        // Extract title
-        $titleNodes = $xpath->query('//title');
-        $title = $titleNodes->length > 0 ? trim($titleNodes->item(0)->textContent) : '';
+        // Check if package.json exists
+        $packageJsonPath = __DIR__ . '/node-crawler/package.json';
+        $checks['package_json_exists'] = file_exists($packageJsonPath);
 
-        // Extract meta description
-        $metaDesc = '';
-        $metaNodes = $xpath->query('//meta[@name="description"]/@content');
-        if ($metaNodes->length > 0) {
-            $metaDesc = $metaNodes->item(0)->textContent;
-        }
-
-        // Try to find main content
-        $contentSelectors = [
-            '//main',
-            '//article',
-            '//*[contains(@class, "content")]',
-            '//*[contains(@class, "post")]',
-            '//*[contains(@class, "article")]',
-            '//*[contains(@id, "content")]',
-            '//*[contains(@id, "main")]',
-            '//div[@class="entry-content"]',
-            '//div[@class="post-content"]'
-        ];
-
-        $mainContent = '';
-        foreach ($contentSelectors as $selector) {
-            $elements = $xpath->query($selector);
-            if ($elements->length > 0) {
-                $element = $elements->item(0);
-                $mainContent = $this->getInnerHTML($element);
-                break;
-            }
-        }
-
-        // Fallback: get body content if no main content found
-        if (empty($mainContent)) {
-            $bodyNodes = $xpath->query('//body');
-            if ($bodyNodes->length > 0) {
-                $mainContent = $this->getInnerHTML($bodyNodes->item(0));
-            }
-        }
-
-        // Clean up the content
-        $mainContent = $this->cleanContent($mainContent);
+        // Overall health
+        $healthy = $checks['node_available'] &&
+            $checks['node_crawler_exists'] &&
+            $checks['package_json_exists'];
 
         return [
-            'title' => $title,
-            'content' => $mainContent,
-            'meta' => [
-                'description' => $metaDesc,
-                'url' => $_POST['url'] ?? $_GET['url'] ?? ''
+            'status' => $healthy ? 'healthy' : 'unhealthy',
+            'checks' => $checks,
+            'timestamp' => date('c')
+        ];
+    }
+
+    private function getStatus()
+    {
+        return [
+            'service' => 'Web Scraper API',
+            'version' => $this->version,
+            'php_version' => PHP_VERSION,
+            'server_time' => date('c'),
+            'uptime' => $this->getUptime(),
+            'memory_usage' => [
+                'current' => memory_get_usage(true),
+                'peak' => memory_get_peak_usage(true),
+                'limit' => ini_get('memory_limit')
+            ],
+            'system_info' => [
+                'os' => php_uname(),
+                'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? 'Unknown'
             ]
         ];
     }
 
-    /**
-     * Get inner HTML of a DOM element
-     */
-    private function getInnerHTML($element)
+    private function notFound()
     {
-        $innerHTML = '';
-        $children = $element->childNodes;
-        foreach ($children as $child) {
-            $innerHTML .= $element->ownerDocument->saveHTML($child);
-        }
-        return $innerHTML;
-    }
-
-    /**
-     * Clean content by removing extra whitespace and empty elements
-     */
-    private function cleanContent($content)
-    {
-        // Remove excessive whitespace
-        $content = preg_replace('/\s+/', ' ', $content);
-        $content = preg_replace('/>\s+</', '><', $content);
-
-        // Remove empty paragraphs and divs
-        $content = preg_replace('/<(p|div|span)[^>]*>\s*<\/\1>/', '', $content);
-
-        return trim($content);
-    }
-
-    /**
-     * Generate JavaScript for content extraction
-     */
-    private function generateExtractionScript()
-    {
-        return "
-        // Remove unwanted elements
-        const unwantedSelectors = [
-            'script', 'style', 'noscript', 'iframe', 'embed', 'object',
-            '.ad', '.advertisement', '.banner', '.popup', '.modal',
-            '#ad', '#advertisement', '#sidebar', 'nav', 'footer'
+        http_response_code(404);
+        return [
+            'success' => false,
+            'error' => 'Endpoint not found',
+            'available_endpoints' => [
+                'GET /' => 'API documentation',
+                'GET /health' => 'Health check',
+                'GET /status' => 'System status',
+                'POST /crawl' => 'Scrape website',
+                'GET /crawl' => 'Scrape website'
+            ],
+            'timestamp' => date('c')
         ];
-        
-        unwantedSelectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => el.remove());
-        });
-        
-        // Return cleaned HTML
-        console.log(document.documentElement.outerHTML);
-        ";
     }
 
-    /**
-     * Get random user agent to avoid detection
-     */
-    private function getRandomUserAgent()
+    private function getBaseUrl()
     {
-        $userAgents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:122.0) Gecko/20100101 Firefox/122.0',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:122.0) Gecko/20100101 Firefox/122.0'
-        ];
-
-        return $userAgents[array_rand($userAgents)];
+        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $path = dirname($_SERVER['REQUEST_URI']);
+        return $protocol . '://' . $host . $path;
     }
 
-    /**
-     * Clean up temporary files and directories
-     */
-    private function cleanup()
+    private function getUptime()
     {
-        if (is_dir($this->userDataDir)) {
-            $this->deleteDirectory($this->userDataDir);
-        }
-    }
-
-    /**
-     * Recursively delete directory
-     */
-    private function deleteDirectory($dir)
-    {
-        if (!is_dir($dir)) return;
-
-        $files = array_diff(scandir($dir), ['.', '..']);
-        foreach ($files as $file) {
-            $path = $dir . DIRECTORY_SEPARATOR . $file;
-            is_dir($path) ? $this->deleteDirectory($path) : unlink($path);
-        }
-        rmdir($dir);
+        $uptime = shell_exec('uptime -p 2>/dev/null');
+        return $uptime ? trim($uptime) : 'Unknown';
     }
 }
 
-// Main webhook handler
+// Handle the request
 try {
-    // Get URL from POST or GET request
-    $url = '';
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $input = json_decode(file_get_contents('php://input'), true);
-        $url = $input['url'] ?? $_POST['url'] ?? '';
-    } else {
-        $url = $_GET['url'] ?? '';
+    $api = new ScraperAPI();
+    $response = $api->handleRequest();
+
+    // Set appropriate HTTP status if it's an error
+    if (isset($response['success']) && $response['success'] === false) {
+        if (!headers_sent()) {
+            http_response_code(400);
+        }
     }
 
-    if (empty($url)) {
-        throw new Exception('URL parameter is required');
-    }
-
-    // Initialize crawler and process URL
-    $crawler = new WebCrawler();
-    $result = $crawler->crawl($url);
-
-    // Return JSON response
-    echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+    echo json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (Exception $e) {
-    http_response_code(400);
+    http_response_code(500);
     echo json_encode([
         'success' => false,
-        'error' => $e->getMessage(),
+        'error' => 'Internal server error: ' . $e->getMessage(),
         'timestamp' => date('c')
     ], JSON_PRETTY_PRINT);
 }
