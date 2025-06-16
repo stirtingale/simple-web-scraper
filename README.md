@@ -349,6 +349,8 @@ node basic-crawler.js https://example.com
 node simple-crawler.js https://example.com
 ```
 
+**Note**: `basic-crawler.js` is currently configured as the default crawler in the API.
+
 **Enable PHP error reporting:**
 ```php
 error_reporting(E_ALL);
